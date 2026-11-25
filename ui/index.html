@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ArchiveDrop</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{
+  --ink:#f3f0ff; --muted:#b4add6; --faint:#9089b8;
+  --night:#0e0a1f; --plum:#1a1236;
+  --magenta:#ff4fd2; --violet:#7c5cff; --cyan:#3fd8ff;
+  --ok:#5df2b0; --bad:#ff6f91; --warn:#ffc65c;
+  --glass:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,.045));
+  --glass-edge:rgba(255,255,255,.17);
+  --lift:inset 0 1px 0 rgba(255,255,255,.28), inset 0 -1px 0 rgba(0,0,0,.35), 0 24px 60px -28px rgba(0,0,0,.85), 0 2px 6px rgba(0,0,0,.25);
+  --well:inset 0 2px 6px rgba(0,0,0,.45), inset 0 -1px 0 rgba(255,255,255,.08);
+  --display:"Bahnschrift","Segoe UI Variable Display","Segoe UI",sans-serif;
+  --text:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  font:14px/1.45 var(--text); color:var(--ink); background:var(--night);
+  overflow:hidden; user-select:none; -webkit-font-smoothing:antialiased;
+}
+/* dusk glow behind the glass */
+.sky{position:fixed;inset:0;z-index:-1;overflow:hidden;background:
+  radial-gradient(120% 80% at 50% 120%, #2a1458 0%, transparent 60%), var(--night)}
+.sky i{position:absolute;border-radius:50%;filter:blur(90px);opacity:.55}
+.sky i:nth-child(1){width:520px;height:520px;left:-120px;top:-140px;background:var(--violet)}
+.sky i:nth-child(2){width:460px;height:460px;right:-120px;top:120px;background:var(--magenta);opacity:.38}
+.sky i:nth-child(3){width:520px;height:380px;left:30%;bottom:-220px;background:var(--cyan);opacity:.28}
+
+.glass{
+  background:var(--glass); border:1px solid var(--glass-edge);
+  backdrop-filter:blur(28px) saturate(170%); -webkit-backdrop-filter:blur(28px) saturate(170%);
+  box-shadow:var(--lift);
+}
+.app{height:100%;display:flex;flex-direction:column;padding:10px 18px 16px;gap:12px}
+
+/* title bar */
+.bar{display:flex;align-items:center;gap:10px;height:46px;padding:0 6px 0 14px;border-radius:999px}
+.brand{display:flex;align-items:center;gap:10px;font:600 16px var(--display);letter-spacing:.02em}
+.mark{width:28px;height:28px;filter:drop-shadow(0 0 10px rgba(255,79,210,.45)) drop-shadow(0 3px 4px rgba(0,0,0,.5))}
+.bar .grow{flex:1;align-self:stretch}
+.chrome{display:flex;gap:6px}
+
+/* pills & 3D buttons */
+.pill{border-radius:999px}
+button{font:inherit;color:inherit;border:0;cursor:pointer;background:none}
+.btn{
+  height:34px;padding:0 16px;border-radius:999px;font-weight:600;font-size:13px;
+  background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.05));
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 3px 0 rgba(10,6,28,.75), 0 8px 18px -8px rgba(0,0,0,.8);
+  transition:transform .08s, box-shadow .08s, filter .15s;
+}
+.btn:hover{filter:brightness(1.15)}
+.btn:active{transform:translateY(3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 0 0 rgba(10,6,28,.75), 0 4px 10px -6px rgba(0,0,0,.8)}
+.btn:disabled{opacity:.4;cursor:default;transform:none;filter:none}
+.btn.round{width:34px;padding:0;display:grid;place-items:center}
+.btn.close:hover{background:linear-gradient(180deg,#ff7d9d,#d93a64)}
+.btn.primary{
+  height:52px;padding:0 34px;font:600 17px var(--display);letter-spacing:.03em;
+  background:linear-gradient(180deg,#ff7fe0 0%,var(--magenta) 40%,var(--violet) 100%);
+  border-color:rgba(255,255,255,.35);
+  box-shadow:inset 0 2px 0 rgba(255,255,255,.55), inset 0 -3px 6px rgba(60,10,90,.45),
+             0 5px 0 #4a1d8f, 0 16px 34px -10px rgba(255,79,210,.65);
+}
+.btn.primary:active{transform:translateY(5px);box-shadow:inset 0 2px 0 rgba(255,255,255,.4), inset 0 -2px 4px rgba(60,10,90,.45), 0 0 0 #4a1d8f, 0 8px 18px -10px rgba(255,79,210,.6)}
+svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ic{display:inline-flex;align-items:center;gap:8px}
+.btn.primary svg.lg{width:22px;height:22px;stroke-width:2.2}
+.link.ic svg{width:14px;height:14px}
+:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+
+/* add strip: link, folder and Download on one line */
+main{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px}
+.add{display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:none}
+.drop{flex:1 1 300px;display:flex;align-items:center;gap:10px;height:64px;padding:7px 7px 7px 24px;border-radius:999px}
+.drop input{flex:1;min-width:0;height:100%;border:0;outline:0;background:transparent;color:var(--ink);
+  font:500 17px var(--text);user-select:text}
+.drop input::placeholder{color:var(--faint)}
+.drop:focus-within{border-color:rgba(63,216,255,.55);box-shadow:var(--lift),0 0 0 4px rgba(63,216,255,.12)}
+.orb{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;flex:none;
+  background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.95) 0 6%,#9ff0ff 18%,var(--cyan) 42%,#2a6fd6 78%,#173a8a 100%);
+  box-shadow:inset 0 -5px 9px rgba(10,20,80,.55), inset 0 3px 4px rgba(255,255,255,.6), 0 5px 0 #142c6c, 0 12px 24px -8px rgba(63,216,255,.7);
+  transition:transform .08s, box-shadow .08s}
+.orb svg{width:22px;height:22px;stroke:#082048;stroke-width:2.6}
+.orb:active{transform:translateY(4px);box-shadow:inset 0 -4px 8px rgba(10,20,80,.55), inset 0 3px 4px rgba(255,255,255,.6), 0 1px 0 #142c6c, 0 6px 14px -8px rgba(63,216,255,.7)}
+.orb.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.add .btn.primary{height:58px;padding:0 26px;flex:none}
+
+/* preview */
+.preview{border-radius:30px;padding:16px 22px;display:none;flex:none;max-height:38vh;overflow:auto}
+.preview::-webkit-scrollbar{width:8px}.preview::-webkit-scrollbar-track{background:transparent}.preview::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:999px}.preview::-webkit-scrollbar-button{display:none}
+.preview.show{display:block}
+.preview .head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.preview h2{font:600 19px var(--display)}
+.preview .meta{color:var(--muted)}
+.preview .err{color:var(--bad)}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
+.bulk{display:flex;flex-direction:column;gap:6px;margin-top:12px;max-height:150px;overflow:auto;padding-right:6px}
+.bulk div{height:32px;padding:0 16px;border-radius:999px;display:flex;align-items:center;background:rgba(255,255,255,.05);
+  box-shadow:var(--well);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:text}
+.typesrow{display:flex;align-items:center;gap:10px;margin-top:12px}
+.typesrow label{color:var(--muted);font-size:13px;white-space:nowrap;margin-left:6px}
+.typesrow input{flex:1;height:36px;border-radius:999px;border:0;outline:0;padding:0 16px;background:rgba(8,4,24,.45);
+  box-shadow:var(--well);color:var(--ink);font:600 14px var(--display);user-select:text}
+.seg{display:inline-flex;gap:4px;padding:4px;border-radius:999px;background:rgba(8,4,24,.5);box-shadow:var(--well)}
+.seg button{width:40px;height:32px;border-radius:999px;font:600 14px var(--display);color:var(--muted)}
+.seg button.on{color:#fff;background:linear-gradient(180deg,#ff7fe0,var(--magenta) 45%,var(--violet));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 0 #4a1d8f,0 6px 14px -6px rgba(255,79,210,.7)}
+.ver{color:var(--faint);font-size:12px;margin-top:18px}
+.updpill{color:#fff;background:linear-gradient(180deg,#7ff0c8,#2fc59a 55%,#16806a);border-color:rgba(255,255,255,.4);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 3px 0 #0d5446,0 0 18px rgba(93,242,176,.55);animation:glow 2.4s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:inset 0 1px 0 rgba(255,255,255,.55),0 3px 0 #0d5446,0 0 30px rgba(93,242,176,.9)}}
+.notes{max-height:260px;overflow:auto;padding:14px 18px;border-radius:24px;background:rgba(8,4,24,.45);box-shadow:var(--well);
+  color:var(--muted);font-size:13.5px;line-height:1.6;user-select:text}
+.notes b{color:var(--ink)} .notes ul{padding-left:18px;margin:6px 0}
+.dlbar{position:relative;height:16px;border-radius:999px;margin-top:16px;background:rgba(8,4,24,.55);box-shadow:var(--well);overflow:hidden;display:none}
+.dlbar i{position:absolute;inset:2px auto 2px 2px;border-radius:999px;width:0;background:linear-gradient(90deg,#2fc59a,#7ff0c8);
+  box-shadow:0 0 12px rgba(93,242,176,.7);transition:width .3s}
+.pdot{width:8px;height:8px;border-radius:50%;background:var(--faint);box-shadow:inset 0 1px 1px rgba(0,0,0,.4)}
+.phonepill.on .pdot{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.phonepill.connecting .pdot,.phonepill.offline .pdot{background:var(--warn);box-shadow:0 0 8px var(--warn)}
+.dialog{max-height:88vh;overflow:auto}
+.dialog::-webkit-scrollbar{width:8px}.dialog::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:999px}
+.sec{margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,.1)}
+.sec h3{font:600 16px var(--display);margin-bottom:4px}
+.sec p.hint{color:var(--muted);font-size:13px;margin:0 0 10px}
+.qrwrap{display:flex;gap:16px;align-items:center;margin:14px 0 4px}
+.qr{flex:none;width:132px;height:132px;border-radius:22px;background:#fff;padding:8px;display:grid;place-items:center;
+  box-shadow:0 10px 26px -10px rgba(124,92,255,.8),inset 0 -3px 0 rgba(0,0,0,.12)}
+.qr svg{width:100%;height:100%}
+.qrtext{color:var(--muted);font-size:13px;line-height:1.55}
+.qrtext b{color:var(--ink);font-weight:600}
+details.adv{margin-top:12px;color:var(--muted);font-size:13px}
+details.adv summary{cursor:pointer;padding:4px 10px;border-radius:999px;display:inline-block}
+details.adv summary:hover{background:rgba(255,255,255,.07);color:var(--ink)}
+.chip{display:flex;align-items:center;gap:8px;height:34px;padding:0 14px 0 8px;border-radius:999px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:var(--muted);
+  box-shadow:var(--well);transition:all .12s}
+.chip .dot{width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,.08);box-shadow:var(--well);display:grid;place-items:center}
+.chip b{font:600 14px var(--display);color:var(--ink)}
+.chip small{font-size:12px}
+.chip.on{background:linear-gradient(180deg,rgba(124,92,255,.55),rgba(124,92,255,.22));border-color:rgba(190,170,255,.55);color:#e7e0ff;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 3px 0 rgba(30,16,80,.8), 0 8px 16px -8px rgba(124,92,255,.8);transform:translateY(-2px)}
+.chip.on .dot{background:radial-gradient(circle at 35% 30%,#fff,var(--cyan) 55%,#2a6fd6);box-shadow:0 0 8px rgba(63,216,255,.7)}
+.quick{margin-left:auto;display:flex;gap:6px}
+.link{color:var(--muted);font-size:12.5px;padding:4px 10px;border-radius:999px}
+.link:hover{color:var(--ink);background:rgba(255,255,255,.07)}
+
+/* folder field */
+.field{display:flex;align-items:center;gap:10px;height:64px;padding:0 8px 0 20px;border-radius:999px;flex:0 1 270px;min-width:210px}
+.field label{color:var(--muted);font-size:13px;white-space:nowrap}
+.field input{flex:1;min-width:0;height:44px;border-radius:999px;border:0;outline:0;padding:0 16px;
+  background:rgba(8,4,24,.45);box-shadow:var(--well);color:var(--ink);font:600 15px var(--display);user-select:text}
+.field input::placeholder{color:var(--faint);font-weight:400}
+.where{color:var(--faint);font-size:12.5px;margin:-6px 0 0 26px;min-height:18px;user-select:text;flex:none}
+
+/* the two panes */
+.panes{flex:1;min-height:0;display:grid;grid-template-columns:minmax(250px,340px) minmax(0,1fr);gap:14px}
+.pane{min-height:0;display:flex;flex-direction:column;border-radius:30px;padding:14px 14px 14px}
+.phead{display:flex;align-items:center;gap:8px;min-height:42px;padding:0 2px 0 8px;flex:none}
+.phead h3{font:600 17px var(--display);flex:1;display:flex;align-items:center;gap:9px}
+.count{font:600 12px var(--display);color:var(--muted);min-width:24px;height:22px;padding:0 8px;border-radius:999px;
+  background:rgba(8,4,24,.45);box-shadow:var(--well);display:inline-flex;align-items:center;justify-content:center}
+.phead .grow{flex:1}
+.btn.round.sm{width:32px;height:32px}
+.tabs{display:inline-flex;gap:4px;padding:4px;border-radius:999px;background:rgba(8,4,24,.5);box-shadow:var(--well)}
+.tabs button{height:36px;padding:0 18px;border-radius:999px;font:600 14px var(--display);color:var(--muted);
+  display:inline-flex;align-items:center;gap:8px}
+.tabs button:hover{color:var(--ink)}
+.tabs button.on{color:#fff;background:linear-gradient(180deg,#ff7fe0,var(--magenta) 45%,var(--violet));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 0 #4a1d8f,0 6px 14px -6px rgba(255,79,210,.7)}
+.tabs .new{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);display:none}
+.tabs .new.show{display:block}
+.view{flex:1;min-height:0;display:none;flex-direction:column;margin-top:12px}
+.view.on{display:flex}
+
+/* downloading view: one big speed figure, then a card per file */
+.sum{display:flex;align-items:flex-end;gap:16px;padding:2px 10px 14px 10px;flex:none}
+.sum.idle{display:none}
+.sum .what{flex:1;min-width:0}
+.sum .title{font:600 18px var(--display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sum .stats{color:var(--muted);font-size:13px;margin-top:2px}
+.sum .big{font:600 40px/1 var(--display);letter-spacing:-.01em;white-space:nowrap;
+  background:linear-gradient(180deg,#fff,#ffc4f1 60%,#ff8fe3);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 4px 14px rgba(255,79,210,.45))}
+.lanes{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:2px 6px 4px 2px}
+.lanes::-webkit-scrollbar{width:8px}.lanes::-webkit-scrollbar-track{background:transparent}.lanes::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:999px}.lanes::-webkit-scrollbar-button{display:none}
+.lane{flex:none;padding:13px 16px 12px;border-radius:24px;background:rgba(8,4,24,.3);box-shadow:var(--well)}
+.lane .info{display:flex;align-items:baseline;gap:12px;margin:0 4px 9px}
+.lane .info .n{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:14.5px}
+.lane .info .p{font:600 16px var(--display)}
+.lane .tube{height:16px}
+.lane .meta{display:flex;justify-content:space-between;gap:12px;margin:9px 4px 0;color:var(--muted);font:500 13px var(--display);white-space:nowrap}
+.idlebox{margin:auto;text-align:center;color:var(--muted);max-width:360px;padding:20px;line-height:1.55}
+.idlebox img{width:76px;height:76px;opacity:.9;margin-bottom:12px;filter:drop-shadow(0 10px 24px rgba(124,92,255,.45))}
+.idlebox b{display:block;font:600 19px var(--display);color:var(--ink);margin-bottom:6px}
+.lane.verifying .fill{background:linear-gradient(90deg,#2fb8a8,var(--cyan) 70%,#b6fff4);
+  box-shadow:inset 0 2px 2px rgba(255,255,255,.55), inset 0 -3px 4px rgba(10,60,70,.5), 0 0 16px rgba(80,230,220,.5)}
+.setrow input[type=time]{height:42px;border-radius:999px;border:1px solid rgba(255,255,255,.12);outline:0;padding:0 16px;
+  background:rgba(8,4,24,.5);box-shadow:var(--well);color:var(--ink);font:600 14px var(--display);color-scheme:dark}
+.seg.wide{flex-wrap:wrap}.seg.wide button{width:auto;padding:0 14px;white-space:nowrap}
+.gbox{margin-top:18px;padding:16px 18px 18px;border-radius:24px;background:rgba(8,4,24,.3);box-shadow:var(--well)}
+.ghead{display:flex;gap:12px;align-items:flex-start;color:var(--muted);font-size:13px;line-height:1.5}
+.ghead b{display:block;color:var(--ink);font-size:14px;margin-bottom:2px}
+.ghead .g{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font:700 16px var(--display);color:#fff;
+  background:conic-gradient(from -45deg,#ea4335 0 25%,#fbbc05 0 50%,#34a853 0 75%,#4285f4 0);box-shadow:0 2px 0 rgba(0,0,0,.35)}
+.steps{margin:12px 0 0 0;padding-left:20px;color:var(--muted);font-size:13px}
+.steps li{margin-top:8px}.steps li span{margin-left:4px}
+.steps li .btn{vertical-align:middle;margin-right:6px}
+.inline.acct{align-items:center;justify-content:space-between}.inline.acct .who{color:var(--muted)}.inline.acct b{color:var(--ink)}
+.setrow .times{display:flex;align-items:center;gap:10px;color:var(--muted)}
+.setrow .times[aria-disabled=true]{opacity:.45;pointer-events:none}
+.tube{position:relative;height:22px;border-radius:999px;background:rgba(8,4,24,.55);box-shadow:var(--well);overflow:hidden}
+.fill{position:absolute;inset:2px auto 2px 2px;width:0;border-radius:999px;min-width:0;
+  background:linear-gradient(90deg,var(--violet),var(--magenta) 70%,#ff9fe9);
+  box-shadow:inset 0 2px 2px rgba(255,255,255,.55), inset 0 -3px 4px rgba(60,10,90,.5), 0 0 16px rgba(255,79,210,.6);
+  transition:width .45s ease}
+.fill::after{content:"";position:absolute;inset:0;border-radius:inherit;
+  background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%);background-size:220% 100%;
+  animation:shine 2.2s linear infinite}
+.idle .fill::after{animation:none;opacity:0}
+@keyframes shine{from{background-position:120% 0}to{background-position:-120% 0}}
+
+/* downloads list */
+.list{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:2px 4px 4px 2px;margin-top:10px}
+.list::-webkit-scrollbar{width:8px}.list::-webkit-scrollbar-track{background:transparent}.list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:999px}.list::-webkit-scrollbar-button{display:none}
+.job{flex:none;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;padding:11px 10px 12px 18px;border-radius:24px;
+  background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09)}
+.job .name{grid-column:1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:32px}
+.job .acts{grid-column:2;grid-row:1;display:flex;gap:6px;align-items:center}
+.job .sub{grid-column:1/3;color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:-2px}
+.job .badge{grid-column:1/3;justify-self:start;margin-top:8px;max-width:100%}
+.badge{height:28px;padding:0 13px;border-radius:999px;display:flex;align-items:center;gap:7px;font:600 12.5px var(--display);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  background:rgba(8,4,24,.4);box-shadow:var(--well);color:var(--muted)}
+.badge::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.badge.active{color:var(--cyan)}.badge.done{color:var(--ok)}.badge.failed{color:var(--bad)}.badge.paused{color:var(--warn)}
+.list .empty{margin:auto;text-align:center;color:var(--muted);padding:24px;max-width:230px;line-height:1.55}
+
+/* activity log: full height, readable, coloured by kind of line */
+.log{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;border-radius:22px;padding:14px 18px;
+  background:rgba(8,4,24,.45);box-shadow:var(--well);font:13px/1.7 "Cascadia Mono","Consolas",monospace;color:var(--muted);user-select:text}
+.log::-webkit-scrollbar{width:8px}.log::-webkit-scrollbar-track{background:transparent}.log::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:999px}.log::-webkit-scrollbar-button{display:none}
+.log div{white-space:pre-wrap;overflow-wrap:anywhere;padding-left:10ch;text-indent:-10ch}
+.log .t{color:var(--faint)}
+.log .q{color:#8fe9ff}.log .f{color:var(--ink)}.log .e{color:var(--bad)}.log .n{color:var(--warn)}.log .d{color:var(--ok)}
+
+@media (max-width:760px){.panes{grid-template-columns:1fr;grid-template-rows:minmax(180px,40%) minmax(0,1fr)}}
+
+/* dialogs */
+.scrim{position:fixed;inset:0;display:none;place-items:center;background:rgba(6,3,16,.55);z-index:10}
+.scrim.show{display:grid}
+.dialog{width:min(560px,92vw);border-radius:36px;padding:26px 28px;
+  background:linear-gradient(180deg,rgba(60,40,120,.55),rgba(30,20,70,.55))}
+.dialog h2{font:600 21px var(--display);margin-bottom:8px}
+.dialog p{color:var(--muted);margin-bottom:16px}
+.dialog .actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
+.dialog .sugg{display:flex;gap:8px;flex-wrap:wrap}
+.setrow{margin-top:14px}
+.setrow label{display:block;color:var(--muted);font-size:13px;margin:0 0 6px 16px}
+.setrow .inline{display:flex;gap:8px}
+.setrow input:is([type=text],[type=email],[type=password]){flex:1;height:42px;border-radius:999px;border:1px solid rgba(255,255,255,.12);outline:0;padding:0 18px;
+  background:rgba(8,4,24,.5);box-shadow:var(--well);color:var(--ink);font:500 14px var(--text);user-select:text}
+.switch{display:flex;align-items:center;gap:12px;margin-top:18px;cursor:pointer;color:var(--ink)}
+.switch .track{width:52px;height:30px;border-radius:999px;background:rgba(8,4,24,.6);box-shadow:var(--well);position:relative;flex:none;transition:background .15s}
+.switch .knob{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff,#cfc8ef 60%,#8c84b8);box-shadow:0 2px 0 rgba(0,0,0,.4),0 4px 8px rgba(0,0,0,.4);transition:left .15s}
+.switch.on .track{background:linear-gradient(180deg,var(--violet),var(--magenta))}
+.switch.on .knob{left:25px}
+.toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);opacity:0;padding:12px 22px;border-radius:999px;
+  transition:all .25s;z-index:20;font-weight:600}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+/* the page settles in when the window opens */
+.app{animation:enter .32s cubic-bezier(.2,.8,.2,1) both}
+@keyframes enter{from{opacity:0;transform:scale(.985) translateY(6px)}}
+/* ---------- motion ---------- */
+:root{--out:cubic-bezier(.2,.8,.2,1);--spring:cubic-bezier(.34,1.5,.64,1)}
+.pane{animation:enter .42s var(--out) both}.pane + .pane{animation-delay:.07s}
+.scrim{display:grid;opacity:0;visibility:hidden;transition:opacity .22s var(--out),visibility 0s linear .22s}
+.scrim.show{opacity:1;visibility:visible;transition:opacity .22s var(--out)}
+.scrim .dialog{opacity:0;transform:translateY(16px) scale(.96);transition:transform .34s var(--spring),opacity .2s var(--out)}
+.scrim.show .dialog{opacity:1;transform:none}
+.preview.show{animation:drop .32s var(--out)}
+@keyframes drop{from{opacity:0;transform:translateY(-10px) scale(.99)}}
+.tabs{position:relative}
+.tabs .ink{position:absolute;top:4px;bottom:4px;left:4px;width:0;border-radius:999px;pointer-events:none;
+  background:linear-gradient(180deg,#ff7fe0,var(--magenta) 45%,var(--violet));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 0 #4a1d8f,0 6px 14px -6px rgba(255,79,210,.7);
+  transition:left .38s var(--spring),width .38s var(--spring)}
+.tabs button{position:relative;z-index:1;transition:color .2s}
+.tabs button.on{background:none;box-shadow:none}
+.view.on{animation:viewin .28s var(--out)}
+@keyframes viewin{from{opacity:0;transform:translateY(8px)}}
+.idlebox{animation:viewin .4s var(--out) both}
+.lane{transition:opacity .3s var(--out),transform .38s var(--out),max-height .38s var(--out),padding .38s var(--out),margin .38s var(--out)}
+.lane.enter{opacity:0;transform:translateY(12px) scale(.98)}
+.lane.leaving{opacity:0;transform:translateX(18px) scale(.98)}
+.lane.leaving .fill{width:calc(100% - 4px)!important}
+.lane.gone{max-height:0!important;padding-top:0;padding-bottom:0;margin-top:-10px;overflow:hidden}
+.lane .fill{transition:width .55s linear}
+.job{transition:opacity .3s var(--out),transform .38s var(--out),max-height .38s var(--out),padding .38s var(--out),margin .38s var(--out),border-color .3s}
+.job.enter{opacity:0;transform:translateX(-14px) scale(.98)}
+.job.leaving{opacity:0;transform:scale(.96);max-height:0!important;padding-top:0;padding-bottom:0;margin-top:-8px;overflow:hidden}
+.badge{transition:color .3s}
+.badge.bump{animation:bump .45s var(--spring)}
+@keyframes bump{40%{transform:scale(1.07)}}
+.toast{transition:opacity .25s var(--out),transform .4s var(--spring)}
+body.leaving .app{opacity:0;transform:scale(.975);transition:opacity .2s var(--out),transform .22s var(--out)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="sky"><i></i><i></i><i></i></div>
+<div class="app">
+  <header class="bar glass">
+    <div class="brand pywebview-drag-region"><img class="mark" src="logo.svg" alt="">ArchiveDrop</div>
+    <div class="grow pywebview-drag-region"></div>
+    <button class="btn ic updpill" id="updPill" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 19V7M7 11l5-5 5 5"/><path d="M5 20h14"/></svg><span id="updTxt">Update</span></button>
+    <button class="btn ic phonepill" id="phonePill" title="Phone links"><svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 17.5h2"/></svg><span class="pdot"></span>Phone</button>
+    <button class="btn ic" id="settingsBtn"><svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></svg>Settings</button>
+    <div class="chrome">
+      <button class="btn round" title="Minimize" onclick="api.minimize()"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
+      <button class="btn round" title="Maximize" onclick="api.toggle_max()"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="3"/></svg></button>
+      <button class="btn round close" title="Close" id="closeBtn"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+    </div>
+  </header>
+
+  <main>
+    <section class="add">
+      <div class="drop glass">
+        <input id="link" placeholder="Paste archive.org links here" spellcheck="false" autocomplete="off">
+        <button class="orb" id="checkBtn" title="Check what's inside"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg></button>
+      </div>
+      <div class="field glass">
+        <label for="system">Save to</label>
+        <input id="system" list="systems" placeholder="Downloads or books" spellcheck="false" autocomplete="off">
+        <datalist id="systems"></datalist>
+      </div>
+      <button class="btn primary ic" id="goBtn"><svg viewBox="0 0 24 24" class="lg"><path d="M12 3.5c-1.2 2-5 6-5 9a5 5 0 0 0 10 0c0-3-3.8-7-5-9z"/><path d="M12 9.5v5M9.8 12.6 12 14.8l2.2-2.2"/><path d="M6 20.5h12"/></svg>Download</button>
+    </section>
+    <div class="where" id="where"></div>
+
+    <section class="preview glass" id="preview">
+      <div class="head">
+        <h2 id="pvTitle"></h2><span class="meta" id="pvMeta"></span>
+        <div class="quick" id="pvQuick"><button class="link" data-all="1">Select all</button><button class="link" data-all="0">Select none</button></div>
+      </div>
+      <div class="chips" id="chips"></div>
+      <div class="bulk" id="bulk"></div>
+      <div class="typesrow" id="typesRow" style="display:none"><label for="bulkTypes">Only these file types</label>
+        <input id="bulkTypes" placeholder="Leave blank for everything, or e.g. .pdf, .mp3" spellcheck="false" autocomplete="off"></div>
+    </section>
+
+    <div class="panes">
+      <section class="pane glass">
+        <div class="phead"><h3>Downloads <span class="count" id="jobCount">0</span></h3>
+          <button class="btn round sm" id="openRoot" title="Open downloads folder"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+          <button class="btn round sm" id="clearBtn" title="Clear finished"><svg viewBox="0 0 24 24"><path d="M5 12.5l4 4 10-10"/></svg></button></div>
+        <div class="list" id="list"></div>
+      </section>
+      <section class="pane glass">
+        <div class="phead">
+          <div class="tabs" role="tablist"><span class="ink"></span>
+            <button class="on" data-tab="now" role="tab">Downloading</button>
+            <button data-tab="log" role="tab">Activity<span class="new" id="logNew"></span></button>
+          </div>
+          <span class="grow"></span>
+          <button class="btn" id="stopBtn" disabled>Stop</button>
+        </div>
+        <div class="view on" id="vNow">
+          <div class="sum idle" id="now">
+            <div class="what"><div class="title" id="nowTitle">Ready</div><div class="stats" id="nowStats"></div></div>
+            <div class="big" id="nowSpeed"></div>
+          </div>
+          <div class="lanes" id="lanes"></div>
+        </div>
+        <div class="view" id="vLog"><div class="log" id="log"></div></div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="scrim" id="scrim"><div class="dialog glass" id="dialog"></div></div>
+<div class="toast glass" id="toast"></div>
+
+<script>
+let api, info = {systems: [], root: "", unsorted: ""};
+let preview = null, logLen = 0, checking = null, bulk = null, tab = "now", polled = false, idleSig = "";
+const LINK_RE = /(?:https?:\/\/)?(?:www\.)?archive\.org\/(?:details|download)\/[^\s"'<>|]+/gi;
+function extractLinks(text) { return [...new Set((text.match(LINK_RE) || []).map(l => l.replace(/[),.;]+$/, "")))]; }
+function showBulk(links) {
+  bulk = links; preview = null; checking = null;
+  const p = $("#preview"); p.classList.add("show");
+  $("#pvTitle").textContent = `${links.length} links ready`;
+  $("#pvMeta").textContent = "They'll all use the folder and file types you pick here.";
+  $("#pvQuick").style.display = "none"; $("#chips").innerHTML = "";
+  $("#bulk").innerHTML = links.map(l => `<div title="${esc(l)}">${esc(l.replace(/^https?:\/\/(www\.)?/, ""))}</div>`).join("");
+  $("#typesRow").style.display = ""; $("#link").value = `${links.length} links pasted`;
+}
+function clearBulk() { bulk = null; $("#bulk").innerHTML = ""; $("#typesRow").style.display = "none"; }
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const human = n => { n = +n || 0; const u = ["B","KB","MB","GB","TB"]; let i = 0;
+  while (n >= 1024 && i < 4) { n /= 1024; i++; } return i ? n.toFixed(n < 10 ? 1 : 0) + " " + u[i] : n + " B"; };
+const dur = s => s >= 3600 ? `${Math.floor(s/3600)}h ${Math.floor(s%3600/60)}m` : s >= 60 ? `${Math.floor(s/60)}m ${Math.floor(s%60)}s` : `${Math.ceil(s)}s`;
+
+function toast(msg, color) {
+  const t = $("#toast"); t.textContent = msg; t.style.color = color || "var(--ink)";
+  t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+function dialog(html) { $("#dialog").innerHTML = html; $("#scrim").classList.add("show");
+  const f = $("#dialog").querySelector("button,input"); f && f.focus(); }
+function closeDialog() { $("#scrim").classList.remove("show"); }
+
+function keyOf(link) { // same item as the current preview?
+  const m = link.match(/archive\.org\/(?:details|download|metadata)\/([^/?#\s|]+)(?:\/([^?#|]+))?/i);
+  const id = m ? m[1] : link.split("|")[0].trim();
+  return id + "/" + (m && m[2] && /\/download\//i.test(link) ? decodeURIComponent(m[2]).trim() : "");
+}
+
+async function check(force) {
+  if (bulk) return;
+  const link = $("#link").value.trim();
+  if (!link) return;
+  const many = extractLinks(link); if (many.length > 1) { showBulk(many); return; }
+  const key = keyOf(link);
+  if (!force && (checking === key || (preview && preview.key === key))) return;
+  checking = key; $("#checkBtn").classList.add("spin");
+  const p = $("#preview"); p.classList.add("show");
+  $("#pvTitle").textContent = "Checking…"; $("#pvMeta").textContent = ""; $("#chips").innerHTML = ""; $("#pvQuick").style.display = "none";
+  const r = await api.check(link);
+  if (checking !== key) return;           // a newer check started
+  checking = null; $("#checkBtn").classList.remove("spin");
+  if (!r.ok) { preview = null; $("#pvTitle").innerHTML = `<span class="err">${esc(r.error)}</span>`; return; }
+  preview = r; preview.key = key;
+  $("#pvTitle").textContent = r.title;
+  $("#pvMeta").textContent = r.single ? `Single file, ${human(r.size)}` : `${r.count} files, ${human(r.size)}`;
+  if (r.single) return;
+  $("#pvQuick").style.display = "";
+  $("#chips").innerHTML = r.exts.map(e => `<button class="chip on" data-ext="${esc(e.ext)}"><span class="dot"></span><b>${esc(e.ext)}</b><small>${e.n} ${e.n === 1 ? "file" : "files"}, ${human(e.size)}</small></button>`).join("");
+}
+function chosenTypes() {
+  if (!preview || preview.single) return "";
+  const chips = [...document.querySelectorAll(".chip")];
+  const on = chips.filter(c => c.classList.contains("on"));
+  if (on.length === chips.length) return "";
+  return on.map(c => c.dataset.ext).filter(e => e.startsWith(".")).map(e => "*" + e).join(",");
+}
+function updateWhere() {
+  const s = $("#system").value.trim();
+  const isAbs = /^[a-z]:\\|^\\\\/i.test(s);
+  $("#where").textContent = !s ? `Saves to ${info.unsorted}\\<item>` :
+    isAbs ? `Saves to ${s}` : `Saves to ${info.root}\\${s}` + (info.systems.length && !info.systems.includes(s) ? "  (new folder)" : "");
+}
+
+async function go(force) {
+  if (bulk) {
+    const types = $("#bulkTypes").value.split(/[\s,]+/).filter(Boolean).map(t => t.startsWith("*") ? t : "*" + (t.startsWith(".") ? t : "." + t)).join(",");
+    const r = await api.add_many(bulk, types, $("#system").value.trim(), !!force);
+    if (r.confirm) return confirmSystem(r);
+    if (!r.ok) { toast(r.error || "None of those links could be added.", "var(--bad)"); return; }
+    toast(r.bad.length ? `Added ${r.added}, skipped ${r.bad.length} that weren't valid` : `Added ${r.added} links`, r.bad.length ? "var(--warn)" : "var(--ok)");
+    clearBulk(); $("#link").value = ""; $("#bulkTypes").value = ""; $("#preview").classList.remove("show"); $("#link").focus();
+    return;
+  }
+  const link = $("#link").value.trim();
+  if (!link) { $("#link").focus(); return; }
+  if (preview && !preview.single && !document.querySelector(".chip.on")) { toast("Every file type is unticked, so there's nothing to download.", "var(--warn)"); return; }
+  const sys = $("#system").value.trim();
+  const r = await api.add(link, chosenTypes(), sys, !!force);
+  if (r.confirm) return confirmSystem(r);
+  if (!r.ok) { toast(r.error, "var(--bad)"); return; }
+  toast("Added to downloads", "var(--ok)");
+  $("#link").value = ""; preview = null; $("#preview").classList.remove("show"); $("#link").focus();
+}
+function confirmSystem(r) {
+  {
+    const sugg = r.suggestions.map(s => `<button class="btn" data-use="${esc(s)}">Use ${esc(s)}</button>`).join("");
+    dialog(`<h2>No "${esc(r.system)}" folder yet</h2>
+      <p>${r.suggestions.length ? "Did you mean one of these?" : "There's no folder with that name."}</p>
+      <div class="sugg">${sugg}</div>
+      <div class="actions"><button class="btn" onclick="closeDialog()">Cancel</button>
+      <button class="btn" id="mk">Create "${esc(r.system)}"</button></div>`);
+    $("#dialog").querySelectorAll("[data-use]").forEach(b => b.onclick = () => { $("#system").value = b.dataset.use; updateWhere(); closeDialog(); go(); });
+    $("#mk").onclick = () => { closeDialog(); go(true); };
+  }
+}
+
+function renderJobs(jobs) {
+  // Keyed: existing rows are updated in place, new ones slide in, removed ones fold away.
+  const list = $("#list");
+  $("#jobCount").textContent = jobs.length;
+  let empty = list.querySelector(".empty");
+  if (!jobs.length) {
+    list.querySelectorAll(".job:not(.leaving)").forEach(foldAway);
+    if (!empty) setTimeout(() => { if (!list.querySelector(".job:not(.leaving)") && !list.querySelector(".empty"))
+      list.insertAdjacentHTML("beforeend", `<div class="empty">Links you add show up here, newest first.</div>`); }, 380);
+    return;
+  }
+  if (empty) empty.remove();
+  const keep = new Set(jobs.map(j => String(j.id)));
+  list.querySelectorAll(".job").forEach(el => { if (!keep.has(el.dataset.id) && !el.classList.contains("leaving")) foldAway(el); });
+  jobs.slice().reverse().forEach(j => {
+    let el = list.querySelector(`.job[data-id="${j.id}"]`);
+    if (!el) {
+      el = document.createElement("div"); el.className = "job enter"; el.dataset.id = j.id;
+      el.innerHTML = `<div class="name"></div>
+        <div class="acts">
+          <button class="btn round sm" title="Open folder" data-open="${j.id}"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+          <button class="btn round sm" title="Remove from list" data-rm="${j.id}"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+        </div>
+        <div class="sub"></div><span class="badge"></span>`;
+      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove("enter")));
+    }
+    list.appendChild(el);                       // keeps newest-first order; moving a node doesn't rebuild it
+    const n = el.querySelector(".name"), sub = el.querySelector(".sub"), b = el.querySelector(".badge");
+    if (n.textContent !== j.item) { n.textContent = j.item; n.title = j.item; }
+    const subText = `${j.types} to ${j.folder}`; if (sub.textContent !== subText) sub.textContent = subText;
+    if (b.textContent !== j.status || !b.classList.contains(j.kind)) {
+      const had = b.textContent !== "";
+      b.className = "badge " + j.kind; b.textContent = j.status; b.title = j.status;
+      if (had) { void b.offsetWidth; b.classList.add("bump"); }
+    }
+  });
+  list.querySelectorAll(".job.leaving").forEach(el => list.appendChild(el));
+}
+function foldAway(el) {
+  el.style.maxHeight = el.offsetHeight + "px"; void el.offsetHeight;
+  el.classList.add("leaving"); setTimeout(() => el.remove(), 420);
+}
+function renderLanes(ls) {
+  // Keyed per file: the bar's width transitions smoothly between polls instead of restarting.
+  const box = $("#lanes");
+  if (box.querySelector(".idlebox")) box.innerHTML = "";
+  const seen = new Set();
+  ls.forEach(l => {
+    const key = l.name; seen.add(key);
+    let el = [...box.querySelectorAll(".lane")].find(x => x.dataset.k === key && !x.classList.contains("leaving"));
+    if (!el) {
+      el = document.createElement("div"); el.className = "lane enter"; el.dataset.k = key;
+      el.innerHTML = `<div class="info"><span class="n"></span><span class="p"></span></div>
+        <div class="tube"><div class="fill"></div></div><div class="meta"><span class="ml"></span><span class="mr"></span></div>`;
+      el.querySelector(".n").textContent = l.name; el.querySelector(".n").title = l.name;
+      box.appendChild(el);
+      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove("enter")));
+    }
+    const pct = l.size ? Math.min(100, l.have / l.size * 100) : 0;
+    const ver = l.phase === "verifying";
+    el.classList.toggle("verifying", ver);
+    el.querySelector(".p").textContent = `${Math.floor(pct)}%`;
+    el.querySelector(".fill").style.width = `calc(${pct}% - 4px)`;
+    el.querySelector(".ml").textContent = ver ? "Checking it against the archive's checksum" : `${human(l.have)} of ${human(l.size)}, ${human(l.speed)}/s`;
+    el.querySelector(".mr").textContent = ver ? "" : l.eta ? `${dur(l.eta)} left` : "";
+  });
+  box.querySelectorAll(".lane:not(.leaving)").forEach(el => {
+    if (seen.has(el.dataset.k)) return;
+    el.querySelector(".p").textContent = "100%"; el.querySelector(".ml").textContent = "Done"; el.querySelector(".mr").textContent = "";
+    el.style.maxHeight = el.offsetHeight + "px"; void el.offsetHeight;
+    el.classList.add("leaving");
+    setTimeout(() => el.classList.add("gone"), 260);
+    setTimeout(() => el.remove(), 680);
+  });
+}
+let speedShown = 0, speedRaf = 0;
+function tweenSpeed(target) {
+  const out = $("#nowSpeed");
+  if (target == null) { cancelAnimationFrame(speedRaf); out.textContent = ""; speedShown = 0; return; }
+  const from = speedShown, t0 = performance.now(), D = 450;
+  cancelAnimationFrame(speedRaf);
+  const step = now => {
+    const k = Math.min(1, (now - t0) / D), e = 1 - Math.pow(1 - k, 3);
+    speedShown = from + (target - from) * e; out.textContent = `${human(speedShown)}/s`;
+    if (k < 1) speedRaf = requestAnimationFrame(step);
+  };
+  speedRaf = requestAnimationFrame(step);
+}
+function moveInk() {
+  const on = document.querySelector(".tabs button.on"), ink = document.querySelector(".tabs .ink");
+  if (on && ink) { ink.style.left = on.offsetLeft + "px"; ink.style.width = on.offsetWidth + "px"; }
+}
+async function closeApp(force) {
+  const r = await api.close(force);
+  if (r && r.ok) document.body.classList.add("leaving");
+  return r;
+}
+function logLine(s) {
+  const m = String(s).match(/^\[\d{4}-\d\d-\d\d (\d\d:\d\d:\d\d)\]\s?([\s\S]*)$/);
+  const time = m ? m[1] : "", msg = m ? m[2] : String(s);
+  const fails = +((msg.match(/(\d+) failed/) || [])[1] || 0);
+  const k = msg.includes("!!") || fails ? "e" : /^(QUEUE|WATCH|UPDATE|ACCOUNT|PHONE)\b/.test(msg) ? "q"
+    : /^\s*->/.test(msg) ? "f" : /downloaded,/.test(msg) ? "d" : /note:|Stopped|Handed over|Outside download hours/.test(msg) ? "n" : "";
+  const d = document.createElement("div"); d.className = k;
+  d.innerHTML = (time ? `<span class="t">${time}</span>  ` : "") + esc(msg.trim());
+  return d;
+}
+function showTab(name) {
+  tab = name;
+  document.querySelectorAll(".tabs [data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  $("#vNow").classList.toggle("on", name === "now"); $("#vLog").classList.toggle("on", name === "log");
+  moveInk();
+  if (name === "log") { $("#logNew").classList.remove("show"); const l = $("#log"); l.scrollTop = l.scrollHeight; }
+}
+let lastJobs = "";
+async function poll() {
+  try {
+    const s = await api.state(logLen);
+    const sig = JSON.stringify(s.jobs);
+    if (sig !== lastJobs) { lastJobs = sig; renderJobs(s.jobs); }
+    const now = $("#now"), lanes = $("#lanes");
+    $("#stopBtn").disabled = !s.busy;
+    const up = $("#updPill");
+    if (s.update) { up.style.display = ""; $("#updTxt").textContent = `Update ${s.update.version}`; lastUpdate = s.update; }
+    else up.style.display = "none";
+    if (s.upd && $("#dlbar")) {
+      const u = s.upd, bar = $("#dlbar");
+      if (u.state === "downloading") { bar.style.display = "block"; $("#dlfill").style.width = `calc(${u.size ? u.have / u.size * 100 : 0}% - 4px)`;
+        $("#updState").textContent = `Downloading ${human(u.have)} of ${human(u.size)}`; }
+      else if (u.state === "installing") { $("#dlfill").style.width = "calc(100% - 4px)"; $("#updState").textContent = "Installing. ArchiveDrop will close and reopen by itself."; }
+      else if (u.state === "error") { $("#updState").textContent = "Update failed: " + u.error; $("#updGo").disabled = false; }
+    }
+    const pp = $("#phonePill"); pp.className = "btn ic phonepill " + (s.phone || "off");
+    pp.title = {on: "Phone links: connected", connecting: "Phone links: connecting", offline: "Phone links: offline, retrying", off: "Phone links: off (click to set up)"}[s.phone || "off"];
+    if (s.lanes.length) {
+      idleSig = "";
+      now.classList.remove("idle");
+      $("#nowTitle").textContent = s.hold ? "Paused" : s.lanes.length === 1 ? "1 file downloading" : `${s.lanes.length} files downloading at once`;
+      $("#nowStats").textContent = s.hold || (s.limit ? `Total speed, limited to ${human(s.limit)}/s` : "Total speed");
+      tweenSpeed(s.hold ? null : s.speed);
+      renderLanes(s.lanes);
+    } else {
+      now.classList.add("idle");
+      const [b, sub] = !s.jobs.length && !s.busy ? ["Nothing downloading yet", "Paste an archive.org link above, check what's inside, pick a folder, then press Download."]
+        : s.busy ? [s.status, s.hold || "Getting the next files ready."]
+        : s.status === "All done" ? ["All done", "Everything in your list has finished."]
+        : [s.status || "Ready", s.hold || `Up to ${s.parallel} files download at a time. Change it in Settings.`];
+      const html = `<div class="idlebox"><img src="logo.svg" alt=""><b>${esc(b)}</b>${esc(sub)}</div>`;
+      if (html !== idleSig) {
+        idleSig = html; tweenSpeed(null);
+        if (lanes.querySelector(".lane:not(.leaving)")) {
+          renderLanes([]);
+          setTimeout(() => { if (idleSig === html && !lanes.querySelector(".lane")) lanes.innerHTML = html; }, 720);
+        } else if (!lanes.querySelector(".lane")) lanes.innerHTML = html;
+        else setTimeout(() => { if (idleSig === html && !lanes.querySelector(".lane")) lanes.innerHTML = html; }, 720);
+      }
+    }
+    if (s.log.length) {
+      const log = $("#log"); const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 8;
+      const frag = document.createDocumentFragment(); s.log.forEach(x => frag.appendChild(logLine(x)));
+      log.appendChild(frag); logLen = s.log_len;
+      while (log.childElementCount > 1500) log.firstElementChild.remove();
+      if (stick || tab !== "log") log.scrollTop = log.scrollHeight;
+      if (polled && tab !== "log") $("#logNew").classList.add("show");
+    }
+    polled = true;
+  } catch (e) {}
+  setTimeout(poll, 500);
+}
+
+function acctHtml(a) {
+  return a
+    ? `<div class="setrow"><div class="inline acct"><span class="who">Signed in as <b>${esc(a)}</b></span><button class="btn" id="aOut">Sign out</button></div></div>`
+    : `<div class="setrow"><label>Email</label><div class="inline"><input type="email" id="aEmail" autocomplete="username" spellcheck="false"></div></div>
+       <div class="setrow"><label>Password</label><div class="inline"><input type="password" id="aPass" autocomplete="current-password"><button class="btn" id="aIn">Sign in</button></div></div>
+       <div class="gbox">
+         <div class="ghead"><span class="g">G</span><div><b>Made your account with Google?</b>
+           Google doesn't allow its sign-in inside apps, so connect with your archive.org keys instead. It takes a minute.</div></div>
+         <ol class="steps">
+           <li><button class="btn ic" id="aKeysPage"><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg>Open my keys page</button>
+             <span>It opens in your browser. Sign in with Google there if it asks.</span></li>
+           <li><span>Copy the two keys it shows and paste them here.</span></li>
+         </ol>
+         <div class="setrow"><label>Access key</label><div class="inline"><input type="text" id="aAccess" spellcheck="false" autocomplete="off"></div></div>
+         <div class="setrow"><label>Secret key</label><div class="inline"><input type="password" id="aSecret" autocomplete="off"><button class="btn" id="aKeysGo">Connect</button></div></div>
+       </div>`;
+}
+function wireAcct() {
+  const box = $("#aBox"), out = $("#aOut"), go = $("#aIn");
+  if (out) out.onclick = async () => { await api.account_sign_out(); box.innerHTML = acctHtml(""); wireAcct(); toast("Signed out of archive.org"); };
+  if (!go) return;
+  const submit = async () => {
+    go.disabled = true; go.textContent = "Signing in…";
+    const r = await api.account_sign_in($("#aEmail").value, $("#aPass").value);
+    if (r.ok) { box.innerHTML = acctHtml(r.account); wireAcct(); toast(`Signed in as ${r.account}`); return; }
+    $("#aPass").value = ""; go.disabled = false; go.textContent = "Sign in"; toast(r.error, "var(--warn)");
+  };
+  go.onclick = submit;
+  $("#aPass").onkeydown = e => { if (e.key === "Enter") submit(); };
+  $("#aKeysPage").onclick = () => api.account_keys_page();
+  const kb = $("#aKeysGo");
+  const connect = async () => {
+    kb.disabled = true; kb.textContent = "Checking…";
+    const r = await api.account_sign_in_keys($("#aAccess").value, $("#aSecret").value);
+    if (r.ok) { box.innerHTML = acctHtml(r.account); wireAcct(); toast(`Signed in as ${r.account}`); return; }
+    kb.disabled = false; kb.textContent = "Connect"; toast(r.error, "var(--warn)");
+  };
+  kb.onclick = connect;
+  $("#aSecret").onkeydown = e => { if (e.key === "Enter") connect(); };
+}
+function settings(openPhone) {
+  api.settings_get().then(c => {
+    dialog(`<h2>Settings</h2>
+      <div class="setrow"><label>Downloads folder (your Save to folders live here)</label>
+        <div class="inline"><input type="text" id="sRoot" value="${esc(c.root)}"><button class="btn" data-pick="sRoot">Browse</button></div></div>
+      <div class="setrow"><label>Folder for downloads with no Save to folder</label>
+        <div class="inline"><input type="text" id="sUns" value="${esc(c.unsorted)}" placeholder="Same as downloads folder"><button class="btn" data-pick="sUns">Browse</button></div></div>
+      <div class="setrow"><label>Files downloading at the same time</label>
+        <div class="seg" id="sPar">${[1,2,3,4,5,6].map(n => `<button data-n="${n}" class="${n === c.parallel ? "on" : ""}">${n}</button>`).join("")}</div></div>
+      <div class="switch ${c.originals ? "on" : ""}" id="sOrig" role="switch" tabindex="0"><span class="track"><span class="knob"></span></span>
+        Skip extras the archive generates (thumbnails, previews, metadata)</div>
+      <div class="switch ${c.verify ? "on" : ""}" id="sVer" role="switch" tabindex="0"><span class="track"><span class="knob"></span></span>
+        Check every file against the archive's checksum</div>
+      <div class="sec">
+        <h3>Speed and download hours</h3>
+        <p class="hint">Keep ArchiveDrop from filling your connection. The limit is shared by all the files downloading at once.</p>
+        <div class="setrow"><label>Speed limit</label>
+          <div class="seg wide" id="sLim">${[0,1,2,5,10,25].map(n => `<button data-mb="${n}" class="${n === c.limit_mb ? "on" : ""}">${n ? n + " MB/s" : "No limit"}</button>`).join("")}</div></div>
+        <div class="switch ${c.sched ? "on" : ""}" id="sSch" role="switch" tabindex="0"><span class="track"><span class="knob"></span></span>Only download during set hours</div>
+        <div class="setrow"><div class="times" id="sTimes" aria-disabled="${!c.sched}">From <input type="time" id="sFrom" value="${esc(c.sched_start)}">
+          to <input type="time" id="sTo" value="${esc(c.sched_end)}"></div>
+          <p class="hint" style="margin:8px 0 0 16px">Downloads pause outside these hours and pick up where they left off.</p></div>
+      </div>
+      <div class="sec">
+        <h3>Send links from your phone</h3>
+        <p class="hint">Uses the free ntfy app. Share an archive.org page to your private topic and it downloads here.</p>
+        <div class="switch ${c.ntfy_enabled ? "on" : ""}" id="pOn" role="switch" tabindex="0"><span class="track"><span class="knob"></span></span>Phone links</div>
+        <div id="pBody" style="${c.ntfy_enabled ? "" : "display:none"}">
+          <div class="qrwrap"><div class="qr" id="pQr"></div>
+            <div class="qrtext"><b>1.</b> In ntfy, tap + and scan this with your camera, or type the topic below.<br>
+              <b>2.</b> On any archive.org page: Share, then ntfy, then this topic.<br>
+              <b>3.</b> Add a folder like <b>books</b> or file types like <b>.pdf</b> in the message to pick where it goes.</div></div>
+          <div class="setrow"><label>Your private topic (anyone who knows it can send links, so keep it to yourself)</label>
+            <div class="inline"><input type="text" id="pTopic" value="${esc(c.ntfy_topic)}" spellcheck="false">
+              <button class="btn" id="pNew">New topic</button><button class="btn" id="pTest">Send test</button></div></div>
+          <details class="adv"><summary>Own ntfy server or account</summary>
+            <div class="setrow"><label>Server</label><div class="inline"><input type="text" id="pServer" value="${esc(c.ntfy_server)}"></div></div>
+            <div class="setrow"><label>Access token (only if your server needs one)</label><div class="inline"><input type="text" id="pToken" value="${esc(c.ntfy_token)}" spellcheck="false"></div></div>
+          </details>
+        </div>
+      </div>
+      <div class="sec">
+        <h3>Archive.org account</h3>
+        <p class="hint">Only needed for items that ask you to sign in. Your password goes straight to archive.org and isn't saved. ArchiveDrop keeps the access keys archive.org sends back, on this PC only.</p>
+        <div id="aBox">${acctHtml(c.account)}</div>
+      </div>
+      <div class="sec">
+        <h3>Updates</h3>
+        <p class="hint">You're on ArchiveDrop ${esc(c.version)}. New versions come from the project's GitHub releases.</p>
+        <div class="switch ${c.auto_update ? "on" : ""}" id="uAuto" role="switch" tabindex="0"><span class="track"><span class="knob"></span></span>Check for updates automatically</div>
+        <div class="setrow"><button class="btn" id="uNow">Check now</button></div>
+      </div>
+      <div class="actions"><span class="ver" style="margin-right:auto">ArchiveDrop ${esc(c.version)}</span><button class="btn" onclick="closeDialog()">Cancel</button><button class="btn primary" id="sSave" style="height:42px;font-size:15px">Save</button></div>`);
+    let par = c.parallel;
+    $("#sPar").onclick = e => { const b = e.target.closest("[data-n]"); if (!b) return; par = +b.dataset.n;
+      $("#sPar").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); };
+    $("#dialog").querySelectorAll("[data-pick]").forEach(b => b.onclick = async () => {
+      const inp = $("#" + b.dataset.pick); const p = await api.pick_folder(inp.value); if (p) inp.value = p; });
+    const pOn = $("#pOn"), topic = $("#pTopic");
+    let qrT;
+    const refreshQr = () => { clearTimeout(qrT); qrT = setTimeout(async () => {
+      if (!topic.value.trim()) { $("#pQr").innerHTML = ""; return; }
+      const q = await api.phone_qr(topic.value.trim(), $("#pServer").value); $("#pQr").innerHTML = q.svg || `<small style="color:#333">${esc(q.url)}</small>`; }, 250); };
+    pOn.onclick = async () => { pOn.classList.toggle("on"); const on = pOn.classList.contains("on");
+      $("#pBody").style.display = on ? "" : "none";
+      if (on && !topic.value.trim()) topic.value = await api.phone_new_topic();
+      refreshQr(); };
+    pOn.onkeydown = e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); pOn.click(); } };
+    $("#pNew").onclick = async () => { topic.value = await api.phone_new_topic(); refreshQr();
+      toast("New topic made. Re-scan the code on your phone.", "var(--warn)"); };
+    $("#pTest").onclick = async () => { const r = await api.phone_test(topic.value, $("#pServer").value, $("#pToken").value);
+      toast(r.ok ? "Test sent. Check your phone." : r.error, r.ok ? "var(--ok)" : "var(--bad)"); };
+    topic.oninput = refreshQr; $("#pServer").oninput = refreshQr;
+    if (c.ntfy_enabled) refreshQr();
+    if (openPhone) setTimeout(() => $(".sec").scrollIntoView({block: "start"}), 50);
+    const uAuto = $("#uAuto"); uAuto.onclick = () => uAuto.classList.toggle("on");
+    uAuto.onkeydown = e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); uAuto.click(); } };
+    $("#uNow").onclick = async () => { $("#uNow").textContent = "Checking..."; const r = await api.update_check(); $("#uNow").textContent = "Check now";
+      if (!r.ok) toast(r.error, "var(--bad)");
+      else if (r.update) { closeDialog(); showUpdate(r.update); }
+      else toast(`You're up to date (${r.current}).`, "var(--ok)"); };
+    const sw = $("#sOrig"); sw.onclick = () => sw.classList.toggle("on"); sw.onkeydown = e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); sw.click(); } };
+    wireAcct();
+    const sVer = $("#sVer"); sVer.onclick = () => sVer.classList.toggle("on");
+    sVer.onkeydown = e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); sVer.click(); } };
+    let limMb = c.limit_mb;
+    $("#sLim").onclick = e => { const b = e.target.closest("[data-mb]"); if (!b) return; limMb = +b.dataset.mb;
+      $("#sLim").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); };
+    const sSch = $("#sSch"); sSch.onclick = () => { sSch.classList.toggle("on");
+      $("#sTimes").setAttribute("aria-disabled", String(!sSch.classList.contains("on"))); };
+    sSch.onkeydown = e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); sSch.click(); } };
+    $("#sSave").onclick = async () => {
+      if (sSch.classList.contains("on") && $("#sFrom").value === $("#sTo").value) {
+        toast("Pick different start and end times for download hours.", "var(--warn)"); return; }
+      info = await api.settings_save($("#sRoot").value, $("#sUns").value, sw.classList.contains("on"), par,
+        {enabled: pOn.classList.contains("on"), topic: topic.value, server: $("#pServer").value, token: $("#pToken").value},
+        uAuto.classList.contains("on"),
+        {verify: sVer.classList.contains("on"), limit_mb: limMb, sched: sSch.classList.contains("on"),
+         start: $("#sFrom").value, end: $("#sTo").value});
+      fillSystems(); updateWhere(); closeDialog(); toast("Settings saved", "var(--ok)");
+    };
+  });
+}
+let lastUpdate = null;
+function mdLite(t) {
+  const lines = esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").split(/\r?\n/);
+  let out = "", inList = false;
+  for (const l of lines) {
+    const li = l.match(/^\s*[-*]\s+(.*)/);
+    if (li) { if (!inList) { out += "<ul>"; inList = true; } out += `<li>${li[1]}</li>`; continue; }
+    if (inList) { out += "</ul>"; inList = false; }
+    if (l.trim()) out += `<p>${l}</p>`;
+  }
+  return out + (inList ? "</ul>" : "");
+}
+function showUpdate(u) {
+  u = u || lastUpdate; if (!u) return;
+  dialog(`<h2>ArchiveDrop ${esc(u.version)} is ready</h2>
+    <p>Installing takes about a minute. Your settings, queue and history stay as they are, and any download in progress picks up again afterwards.</p>
+    <div class="notes">${mdLite(u.notes) || "No release notes."}</div>
+    <div class="dlbar" id="dlbar"><i id="dlfill"></i></div><p class="hint" id="updState" style="margin:8px 0 0"></p>
+    <div class="actions"><button class="btn" onclick="closeDialog()">Later</button>
+      <button class="btn primary" id="updGo" style="height:42px;font-size:15px">Install update</button></div>`);
+  $("#updGo").onclick = async () => {
+    $("#updGo").disabled = true;
+    const r = await api.update_install();
+    if (!r.ok) { $("#updState").textContent = r.error; $("#updGo").disabled = false; }
+  };
+}
+function fillSystems() { $("#systems").innerHTML = info.systems.map(s => `<option value="${esc(s)}">`).join(""); }
+
+async function start() {
+  requestAnimationFrame(moveInk); window.addEventListener("resize", moveInk);
+  api = window.pywebview.api;
+  info = await api.info(); fillSystems(); updateWhere();
+  const link = $("#link");
+  link.addEventListener("keydown", e => { if (e.key === "Enter") check(); });
+  link.addEventListener("paste", e => {
+    const text = (e.clipboardData || window.clipboardData).getData("text");
+    const many = extractLinks(text);
+    if (many.length > 1) { e.preventDefault(); showBulk(many); return; }
+    if (bulk) { clearBulk(); link.value = ""; }
+    setTimeout(check, 30);
+  });
+  link.addEventListener("input", () => {
+    if (bulk) { clearBulk(); $("#preview").classList.remove("show"); }
+    if (preview && keyOf(link.value.trim()) !== preview.key) { preview = null; $("#preview").classList.remove("show"); }
+  });
+  $("#checkBtn").onclick = () => check(true);
+  $("#chips").onclick = e => { const c = e.target.closest(".chip"); if (c) c.classList.toggle("on"); };
+  $("#pvQuick").onclick = e => { const b = e.target.closest("[data-all]"); if (b) document.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", b.dataset.all === "1")); };
+  $("#system").addEventListener("input", updateWhere);
+  $("#system").addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  $("#goBtn").onclick = () => go();
+  $("#stopBtn").onclick = () => api.stop();
+  $("#clearBtn").onclick = () => api.clear_finished();
+  $("#openRoot").onclick = () => api.open_folder(0);
+  $("#settingsBtn").onclick = () => settings(false);
+  $("#phonePill").onclick = () => settings(true);
+  $("#updPill").onclick = () => showUpdate();
+  document.querySelector(".tabs").onclick = e => { const b = e.target.closest("[data-tab]"); if (b) showTab(b.dataset.tab); };
+  $("#list").onclick = async e => {
+    const o = e.target.closest("[data-open]"), r = e.target.closest("[data-rm]");
+    if (o) api.open_folder(+o.dataset.open);
+    if (r) { const res = await api.remove(+r.dataset.rm); if (!res.ok) toast(res.error, "var(--warn)"); }
+  };
+  $("#closeBtn").onclick = async () => {
+    const r = await closeApp(false);
+    if (r.confirm) dialog(`<h2>A download is still running</h2><p>If you close now it stops, and it picks up from the same spot next time you open ArchiveDrop.</p>
+      <div class="actions"><button class="btn" onclick="closeDialog()">Keep downloading</button><button class="btn" onclick="closeApp(true)">Close anyway</button></div>`);
+  };
+  document.querySelectorAll(".pywebview-drag-region").forEach(d => d.addEventListener("dblclick", () => api.toggle_max()));
+  $("#scrim").onclick = e => { if (e.target.id === "scrim") closeDialog(); };
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeDialog(); });
+  link.focus(); poll();
+}
+window.addEventListener("pywebviewready", start);
+</script>
+</body>
+</html>

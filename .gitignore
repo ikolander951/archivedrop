@@ -1,0 +1,16 @@
+# build output
+build_py/
+dist/
+out/
+__pycache__/
+*.pyc
+# local app data if run from source
+config.json
+queue.txt
+watch.txt
+done.txt
+failed.txt
+state.json
+gui.pid
+*.lock
+logs/
