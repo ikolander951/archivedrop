@@ -97,7 +97,7 @@ if "--background" in sys.argv:                       # scheduled task: no window
 import webview  # noqa: E402
 
 APP = "ArchiveDrop"
-VERSION = "1.9.4"
+VERSION = "1.9.5"
 REPO = "ikolander951/archivedrop"
 ASSET = "ArchiveDrop-Setup.exe"
 UPDATE_EVERY = 6 * 3600

@@ -177,7 +177,8 @@ details.adv summary:hover{background:rgba(255,255,255,.07);color:var(--ink)}
   box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 0 #4a1d8f,0 6px 14px -6px rgba(255,79,210,.7)}
 .tabs .new{width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);display:none}
 .tabs .new.show{display:block}
-.view{flex:1;min-height:0;display:none;flex-direction:column;margin-top:12px}
+/* own layer: live progress updates repaint here without re-blending the glass pane's edge (it built up into a white line) */
+.view{flex:1;min-height:0;display:none;flex-direction:column;margin-top:12px;transform:translateZ(0)}
 .view.on{display:flex}
 
 /* downloading view: one big speed figure, then a card per file */

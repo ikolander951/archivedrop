@@ -1,4 +1,4 @@
-#define AppVer "1.9.4"
+#define AppVer "1.9.5"
 [Setup]
 AppId={{A8D3C9F2-5B1E-4C7A-9E2D-3F4B6A7C8D90}
 AppName=ArchiveDrop
